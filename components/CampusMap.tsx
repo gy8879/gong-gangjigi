@@ -1,8 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Alert } from 'react-native';
-import MapView, { Marker, PROVIDER_GOOGLE, Region } from 'react-native-maps';
+import { View, Text, StyleSheet, Alert, Platform } from 'react-native';
 import * as Location from 'expo-location';
 import { CampusLocation, UserLocation } from '../types/location';
+
+// 웹에서는 react-native-maps를 import하지 않음
+let MapView: any, Marker: any, Region: any;
+if (Platform.OS !== 'web') {
+  const Maps = require('react-native-maps');
+  MapView = Maps.default;
+  Marker = Maps.Marker;
+  Region = Maps.Region;
+}
 
 const CAMPUS_LOCATIONS: CampusLocation[] = [
   {
@@ -42,7 +50,7 @@ const CAMPUS_LOCATIONS: CampusLocation[] = [
   }
 ];
 
-const INITIAL_REGION: Region = {
+const INITIAL_REGION = {
   latitude: 36.3735,
   longitude: 127.3615,
   latitudeDelta: 0.01,
@@ -50,12 +58,15 @@ const INITIAL_REGION: Region = {
 };
 
 export default function CampusMap() {
-  const [region, setRegion] = useState<Region>(INITIAL_REGION);
+  const [region, setRegion] = useState(INITIAL_REGION);
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
   const [hasLocationPermission, setHasLocationPermission] = useState(false);
+  const [mapError, setMapError] = useState<string | null>(null);
 
   useEffect(() => {
-    requestLocationPermission();
+    if (Platform.OS !== 'web') {
+      requestLocationPermission();
+    }
   }, []);
 
   const requestLocationPermission = async () => {
@@ -135,17 +146,62 @@ export default function CampusMap() {
     }
   };
 
+  const handleMapError = (error: any) => {
+    console.error('지도 로드 에러:', error);
+    setMapError('지도를 불러올 수 없습니다. 잠시 후 다시 시도해주세요.');
+  };
+
+  // 웹에서는 간단한 지도 플레이스홀더 표시
+  if (Platform.OS === 'web') {
+    return (
+      <View style={styles.webContainer}>
+        <View style={styles.webMapPlaceholder}>
+          <Text style={styles.webMapIcon}>🗺️</Text>
+          <Text style={styles.webMapTitle}>충남대학교 캠퍼스 맵</Text>
+          <Text style={styles.webMapDescription}>
+            지도는 모바일 앱에서만 사용할 수 있습니다.
+          </Text>
+          <View style={styles.webLocationsList}>
+            <Text style={styles.webLocationsTitle}>📍 주요 장소</Text>
+            {CAMPUS_LOCATIONS.map((location) => (
+              <View key={location.id} style={styles.webLocationItem}>
+                <View style={[styles.webLocationDot, { backgroundColor: getMarkerColor(location.type) }]} />
+                <View style={styles.webLocationInfo}>
+                  <Text style={styles.webLocationTitle}>{location.title}</Text>
+                  <Text style={styles.webLocationDescription}>{location.description}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  if (mapError) {
+    return (
+      <View style={styles.errorContainer}>
+        <Text style={styles.errorIcon}>🗺️</Text>
+        <Text style={styles.errorTitle}>지도 로드 실패</Text>
+        <Text style={styles.errorMessage}>{mapError}</Text>
+        <Text style={styles.errorTip}>
+          인터넷 연결을 확인하고 앱을 다시 시작해보세요.
+        </Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <MapView
         style={styles.map}
-        provider={PROVIDER_GOOGLE}
         region={region}
         onRegionChangeComplete={setRegion}
         showsUserLocation={hasLocationPermission}
         showsMyLocationButton={true}
         showsCompass={true}
         showsScale={true}
+        onError={handleMapError}
       >
         {/* 캠퍼스 주요 장소 마커 */}
         {CAMPUS_LOCATIONS.map((location) => (
@@ -230,5 +286,101 @@ const styles = StyleSheet.create({
   legendText: {
     fontSize: 12,
     color: '#6B7280',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f0f0f0',
+    padding: 20,
+  },
+  errorIcon: {
+    fontSize: 50,
+    marginBottom: 10,
+  },
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 5,
+  },
+  errorMessage: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 15,
+  },
+  errorTip: {
+    fontSize: 14,
+    color: '#888',
+    textAlign: 'center',
+  },
+  webContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f0f0f0',
+    padding: 20,
+  },
+  webMapPlaceholder: {
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 5,
+    elevation: 3,
+  },
+  webMapIcon: {
+    fontSize: 50,
+    marginBottom: 10,
+  },
+  webMapTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 5,
+  },
+  webMapDescription: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 15,
+  },
+  webLocationsList: {
+    width: '100%',
+  },
+  webLocationsTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 8,
+  },
+  webLocationItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  webLocationDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: 10,
+  },
+  webLocationInfo: {
+    flex: 1,
+  },
+  webLocationTitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#333',
+  },
+  webLocationDescription: {
+    fontSize: 12,
+    color: '#666',
   },
 });
