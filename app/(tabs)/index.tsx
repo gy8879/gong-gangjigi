@@ -27,6 +27,24 @@ export default function Index() {
   const handleGetRecommendations = () => {
     // AI 추천 로직
     console.log('AI 추천 요청');
+    // 간단 검증
+    if (!startTime || !endTime) {
+      Alert.alert('시간을 입력해주세요', '시작/종료 시간을 확인해주세요.');
+      return;
+    }
+
+    // 관심사 배열 → 문자열
+    const interestsParam = selectedInterests.join(',');
+
+    // 쿼리로 전달 (추천 탭에서 읽어 필터링/정렬 적용)
+    router.push({
+      pathname: '/(tabs)/recommend',
+      params: {
+        start: startTime,
+        end: endTime,
+        interests: interestsParam,
+      },
+    });
   };
 
   return (
