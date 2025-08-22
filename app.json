@@ -14,19 +14,23 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "config": {
+        "googleMapsApiKey": "AIzaSyD24ZtowfCHdPCJoGNpkcRN_ixmSm3GMhE"
+      }
     },
     "android": {
+      "package": "com.gy8879.gongangjigi",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
-    },
-    "web": {
-      "bundler": "metro",
-      "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "edgeToEdgeEnabled": true,
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyD24ZtowfCHdPCJoGNpkcRN_ixmSm3GMhE"
+        }
+      }
     },
     "plugins": [
       "expo-router"
