@@ -72,7 +72,7 @@ export default function Index() {
             </Text>
             <View style={styles.locationRow}>
               <Text style={styles.locationIcon}>📍</Text>
-              <Text style={styles.locationText}>현재 위치: 공대 5관</Text>
+              <Text style={styles.locationText}>현재 위치: 공대 5호관</Text>
             </View>
           </View>
 

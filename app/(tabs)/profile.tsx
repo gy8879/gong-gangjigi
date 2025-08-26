@@ -17,7 +17,7 @@ export default function ProfileScreen() {
               <Text style={styles.avatarText}>👩</Text>
             </View>
             <Text style={styles.userName}>김민준</Text>
-            <Text style={styles.userInfo}>충남대학교 컴퓨터공학과</Text>
+            <Text style={styles.userInfo}>충남대학교 컴퓨터융합학부</Text>
           </View>
           
           <View style={styles.placeholderCard}>
