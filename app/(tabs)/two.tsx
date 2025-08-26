@@ -1,5 +1,6 @@
 // app/(tabs)/two.tsx
 import React, { useMemo, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   View,
   Text,
@@ -17,13 +18,16 @@ import { useLocalSearchParams } from 'expo-router';
 type RecItem = {
   id?: string;
   title?: string;
-  desc?: string;
+  desc?: string;          // 활동 설명(백업)
   tags?: string[];
-  dateText?: string;   // 예: 2025-09-01
-  placeText?: string;  // 예: 도서관 401호
-  // ▼ LLM이 생성해 주는 필드
-  reason?: string;     // “왜 맞는지” 한두 문장
-  fitScore?: number;   // 0~100
+  // 서버가 주는 필드(있으면 사용)
+  reason?: string;        // AI 한줄 요약/근거
+  fitScore?: number;
+  locationName?: string;
+  time?: { startISO?: string; endISO?: string };
+  // 서버가 직접 만들어줄 수도 있는 표시용 문자열(있으면 그대로 사용)
+  timeText?: string;
+  placeText?: string;
 };
 
 const WEBHOOK_TEST_URL =
@@ -55,8 +59,25 @@ export default function RecommendScreen() {
 
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState<RecItem[] | null>(null);
-  const [raw, setRaw] = useState<any>(null);       // 디버그용
-  const [summary, setSummary] = useState<string>(''); // LLM 요약
+  const [raw, setRaw] = useState<any>(null);         // 디버그용
+  const [summary, setSummary] = useState<string>(''); // (옵션) 전체 요약
+
+  // 시간 포맷 보조 (서버가 timeText를 안 주더라도 표시되게)
+  const fmtK = (s?: string, e?: string) => {
+    if (!s) return '';
+    const S = new Date(s);
+    const E = e ? new Date(e) : null;
+    const w = ['일','월','화','수','목','금','토'][S.getDay()];
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const sDate = `${S.getMonth() + 1}/${S.getDate()}(${w})`;
+    const sTime = `${pad(S.getHours())}:${pad(S.getMinutes())}`;
+    if (!E) return `${sDate} ${sTime}`;
+    const same = S.toDateString() === E.toDateString();
+    const eTime = `${pad(E.getHours())}:${pad(E.getMinutes())}`;
+    return same
+      ? `${sDate} ${sTime}–${eTime}`
+      : `${sDate} ${sTime} ~ ${E.getMonth() + 1}/${E.getDate()} ${eTime}`;
+  };
 
   const onCallWebhook = async () => {
     try {
@@ -99,8 +120,28 @@ export default function RecommendScreen() {
         Array.isArray(data?.results) ? data.results :
         [];
 
-      setItems(list);
+      // 안전 가공(시간/장소 표시 문자열 보장)
+      const normalized = list.map((it) => {
+        // 언제
+        const whenText =
+          it.timeText ||
+          (it.time?.startISO ? fmtK(it.time.startISO, it.time.endISO) : '') ||
+          '';
+        // 어디
+        const whereText =
+          it.placeText || it.locationName || '';
+
+        return {
+          ...it,
+          timeText: whenText,
+          placeText: whereText,
+        };
+      });
+
+      setItems(normalized);
+      
       if (typeof data?.summary === 'string') setSummary(data.summary);
+      await AsyncStorage.setItem('GG_LAST_RECS', JSON.stringify(list));
     } catch (e: any) {
       console.error(e);
       Alert.alert('요청 실패', e?.message ?? '네트워크 오류');
@@ -109,35 +150,37 @@ export default function RecommendScreen() {
     }
   };
 
-  const renderCard = ({ item }: { item: RecItem }) => (
-    <View style={styles.card}>
-      {!!item.title && <Text style={styles.cardTitle}>{item.title}</Text>}
-      {!!item.desc && <Text style={styles.cardBody}>{item.desc}</Text>}
+  const renderCard = ({ item }: { item: RecItem }) => {
+    // 카드에 꼭 보여줄 3요소 만들기
+    const title = item.title ?? '추천 항목';
+    const aiSummary = item.reason || item.desc || '';       // AI 요약(없으면 desc)
+    const whenText = item.timeText || (item.time?.startISO ? fmtK(item.time.startISO, item.time.endISO) : '');
+    const whereText = item.placeText || item.locationName || '';
 
-      {/* LLM 생성 근거/점수 */}
-      {!!item.reason && (
-        <Text style={styles.cardReason}>🤖 {item.reason}</Text>
-      )}
-      {typeof item.fitScore === 'number' && (
-        <Text style={styles.cardScore}>적합도 {item.fitScore}%</Text>
-      )}
+    return (
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>{title}</Text>
 
-      {(item.dateText || item.placeText) && (
-        <Text style={styles.cardMeta}>
-          {item.dateText ?? ''}{item.placeText ? ` · ${item.placeText}` : ''}
-        </Text>
-      )}
-      {!!item.tags?.length && (
-        <View style={styles.tagRow}>
-          {item.tags!.map((t, i) => (
-            <View key={`${t}-${i}`} style={styles.tagChip}>
-              <Text style={styles.tagText}>#{t}</Text>
-            </View>
-          ))}
-        </View>
-      )}
-    </View>
-  );
+        {!!aiSummary && <Text style={styles.cardBody}>🤖 {aiSummary}</Text>}
+        {!!whenText && <Text style={styles.cardMeta}>🕒 {whenText}</Text>}
+        {!!whereText && <Text style={styles.cardMeta}>📍 {whereText}</Text>}
+
+        {typeof item.fitScore === 'number' && (
+          <Text style={styles.cardScore}>적합도 {Math.round(item.fitScore)}%</Text>
+        )}
+
+        {!!item.tags?.length && (
+          <View style={styles.tagRow}>
+            {item.tags.map((t, i) => (
+              <View key={`${t}-${i}`} style={styles.tagChip}>
+                <Text style={styles.tagText}>#{t}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+      </View>
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -176,10 +219,8 @@ export default function RecommendScreen() {
             </Text>
             <Text style={styles.helperNote}>※ n8n에서 “Listen for test event”를 켠 뒤 버튼을 누르세요.</Text>
 
-            {/* LLM 요약 */}
-            {summary ? (
-              <Text style={styles.summaryText}>🤖 요약: {summary}</Text>
-            ) : null}
+            {/* (옵션) 전체 요약을 보이고 싶다면 아래 주석을 해제하세요 */}
+            {summary ? <Text style={styles.summaryText}>🤖 요약: {summary}</Text> : null}
           </View>
 
           {/* 로딩 */}
@@ -278,10 +319,10 @@ const styles = StyleSheet.create({
     borderColor: '#E5E7EB',
   },
   cardTitle: { fontSize: 17, fontWeight: '700', color: '#111827', marginBottom: 6 },
-  cardBody: { fontSize: 15, color: '#374151', lineHeight: 22 },
-  cardReason: { marginTop: 8, color: '#374151' },
-  cardScore: { marginTop: 4, color: '#2151FF', fontWeight: '700' },
-  cardMeta: { marginTop: 8, color: '#6B7280' },
+  cardBody: { fontSize: 15, color: '#374151', lineHeight: 22, marginTop: 2 },
+  cardReason: { marginTop: 8, color: '#374151' }, // (미사용시 무관)
+  cardScore: { marginTop: 6, color: '#2151FF', fontWeight: '700' },
+  cardMeta: { marginTop: 6, color: '#6B7280' },
   tagRow: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 8, gap: 6 },
   tagChip: {
     backgroundColor: '#EEF2FF',
